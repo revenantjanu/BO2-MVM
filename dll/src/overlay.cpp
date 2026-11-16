@@ -863,31 +863,23 @@ static void PageCamera() {
 static void PageWorld() {
     Cols2Begin("world");
     ColNext();
-    CardBegin("sun", "w_sun");
-    if (ImGui::ColorEdit3("color", g_fx.sunColor, ImGuiColorEditFlags_NoInputs)) { SendCheats(); QueueCmd("r_lightTweakSunColor %.3f %.3f %.3f", g_fx.sunColor[0], g_fx.sunColor[1], g_fx.sunColor[2]); }
-    if (Sl("intensity", &g_fx.sunLight, 0.0f, 10.0f, "%.2fx")) { SendCheats(); QueueCmd("r_lightTweakSunLight %.3f", g_fx.sunLight); }
-    if (Sl("direction x", &g_fx.sunDir[0], -180, 180, "%.0f")) { SendCheats(); QueueCmd("r_lightTweakSunDirection %.2f %.2f %.2f", g_fx.sunDir[0], g_fx.sunDir[1], g_fx.sunDir[2]); }
-    if (Sl("direction y", &g_fx.sunDir[1], -180, 180, "%.0f")) { SendCheats(); QueueCmd("r_lightTweakSunDirection %.2f %.2f %.2f", g_fx.sunDir[0], g_fx.sunDir[1], g_fx.sunDir[2]); }
-    if (Sl("height", &g_fx.sunDir[2], -180, 180, "%.0f")) { SendCheats(); QueueCmd("r_lightTweakSunDirection %.2f %.2f %.2f", g_fx.sunDir[0], g_fx.sunDir[1], g_fx.sunDir[2]); }
-    if (Btn("reset sun")) { g_fx.sunLight = 1.0f; SendCheats(); QueueCmd("r_lightTweakSunLight 1"); QueueCmd("r_lightTweakSunColor 1 1 1"); }
-    Hint("Uses the game's light-tweak dvars. If nothing changes on this map, it does not use them.");
+    CardBegin("map light", "w_sun");
+    Toggle("live preview in game (recorded as you see it)", &g_liveGrade);
+    Sl("brightness", &g_lightBright, -2.0f, 2.0f, "%.2f");
+    ImGui::ColorEdit3("light colour", g_lightCol, ImGuiColorEditFlags_NoInputs);
+    if (Btn("reset map light")) { g_lightBright = 0.0f; g_lightCol[0] = g_lightCol[1] = g_lightCol[2] = 1.0f; }
+    Hint("This lights the whole picture, like a colour wash plus exposure. It is drawn by the tool, not the game, because the game ignores its own sun settings on this build. Weapon and screen text get the same light.");
+    if (Btn("fix a black / broken map")) {
+        SendCheats();
+        QueueCmd("r_lightTweakSunLight 1"); QueueCmd("r_lightTweakSunColor 1 1 1");
+        QueueCmd("r_filmUseTweaks 0"); QueueCmd("r_filmTweakEnable 0");
+        QueueCmd("r_fog 1"); QueueCmd("r_fogTweak 0"); QueueCmd("r_dof_tweak 0"); QueueCmd("r_dof_enable 0");
+    }
     CardEnd();
     ColNext();
     CardBegin("fog", "w_fog");
     if (Toggle("fog", &g_fx.fog)) { SendCheats(); QueueCmd("r_fog %d", g_fx.fog ? 1 : 0); }
     if (Btn("reset fog")) { g_fx.fog = true; SendCheats(); QueueCmd("r_fog 1"); }
-    CardEnd();
-    CardBegin("map light and color", "w_grade");
-    bool ch = Toggle("adjust the map light", &g_fx.grade);
-    ch |= Sl("brightness", &g_fx.bright, -0.5f, 0.5f);
-    ch |= Sl("saturation", &g_fx.sat, 0.0f, 3.0f);
-    if (ch) {
-        SendCheats();
-        QueueCmd("r_filmUseTweaks %d", g_fx.grade ? 1 : 0); QueueCmd("r_filmTweakEnable %d", g_fx.grade ? 1 : 0);
-        QueueCmd("r_filmTweakBrightness %.3f", g_fx.bright);
-        QueueCmd("r_filmTweakDesaturation %.3f", 1.0f - g_fx.sat);
-    }
-    if (Btn("reset map light")) { g_fx.grade = false; g_fx.bright = 0; g_fx.contrast = 1; g_fx.sat = 1; SendCheats(); QueueCmd("r_filmUseTweaks 0"); QueueCmd("r_filmTweakEnable 0"); }
     CardEnd();
     Cols2End();
 }
@@ -899,9 +891,6 @@ static void DofApply(bool force) {
     for (int i = 0; i < 6; ++i) if (std::fabs(v[i] - last[i]) > (i < 4 ? 1.5f : 0.05f)) ch = true;
     if (!ch) return;
     for (int i = 0; i < 6; ++i) last[i] = v[i];
-    QueueCmd("r_dof_nearStart %.1f", v[0]); QueueCmd("r_dof_nearEnd %.1f", v[1]);
-    QueueCmd("r_dof_farStart %.1f", v[2]);  QueueCmd("r_dof_farEnd %.1f", v[3]);
-    QueueCmd("r_dof_nearBlur %.1f", v[4]);  QueueCmd("r_dof_farBlur %.1f", v[5]);
     // second route: the game script applies it with setdepthoffield, which does not depend on console dvars
     QueueCmd("set mvm_dof \"%.1f %.1f %.1f %.1f %.1f %.1f\"", v[0], v[1], v[2], v[3], v[4], v[5]);
 }
@@ -1083,10 +1072,10 @@ static void PageEffects() {
     CardBegin("depth of field", "e_dof");
     {
         bool on = Toggle("dof", &g_fx.dof);
-        if (on) { SendCheats(); QueueCmd("r_dof_enable %d", g_fx.dof ? 1 : 0); QueueCmd("r_dof_tweak %d", g_fx.dof ? 1 : 0); if (g_fx.dof) DofApply(true); else DofOff(); }
+        if (on) { SendCheats(); if (g_fx.dof) DofApply(true); else DofOff(); }
         ImGui::TextDisabled("focus on");
         const char* tg[] = {"manual", "me", "zombie", "lock-on", "all"};
-        if (Seg("doft", tg, 5, &g_fx.dofTarget) && g_fx.dofTarget != 0 && !g_fx.dof) { g_fx.dof = true; SendCheats(); QueueCmd("r_dof_enable 1"); QueueCmd("r_dof_tweak 1"); DofApply(true); }
+        if (Seg("doft", tg, 5, &g_fx.dofTarget) && g_fx.dofTarget != 0 && !g_fx.dof) { g_fx.dof = true; SendCheats(); DofApply(true); }
         if (g_fx.dofTarget == 2) ImGui::TextDisabled(ZmSelectedId() > 0 ? "the zombie selected on the zombies tab" : "select a zombie on the zombies tab first");
         if (g_fx.dofTarget == 3 && !g.lockMode) ImGui::TextDisabled("turn on lock-on in the camera tab first");
         if (g_fx.dofTarget == 4) ImGui::TextDisabled("the sharp zone covers all your zombies");
@@ -1111,7 +1100,7 @@ static void PageEffects() {
             if (ch) { g_fx.dofTarget = 0; SendCheats(); DofApply(true); }
             ImGui::TreePop();
         }
-        if (Btn("reset dof")) { g_fx.dof = false; g_fx.dofTarget = 0; SendCheats(); QueueCmd("r_dof_enable 0"); QueueCmd("r_dof_tweak 0"); DofOff(); }
+        if (Btn("reset dof")) { g_fx.dof = false; g_fx.dofTarget = 0; SendCheats(); DofOff(); }
     }
     CardEnd();
     ColNext();

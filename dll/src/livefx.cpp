@@ -11,6 +11,8 @@
 namespace mvm {
 
 bool g_liveFxOk = false;
+float g_lightBright = 0.0f;                       // map light: overall brightness in stops
+float g_lightCol[3] = {1.0f, 1.0f, 1.0f};         // map light: colour the whole scene is lit with
 
 namespace {
 ID3D11Device* s_dev = nullptr;
@@ -28,7 +30,7 @@ DXGI_FORMAT s_fmt = DXGI_FORMAT_UNKNOWN;
 bool s_failed = false;
 
 const char* kHlsl = R"(
-cbuffer C : register(b0) { float4 p0; float4 p1; float4 p2; };
+cbuffer C : register(b0) { float4 p0; float4 p1; float4 p2; float4 p3; };
 Texture2D T : register(t0);
 SamplerState S : register(s0);
 struct VO { float4 pos : SV_Position; float2 uv : TEXCOORD0; };
@@ -53,10 +55,10 @@ float4 PS(VO i) : SV_Target {
                     T.Sample(S, uv + float2(0, px.y)).rgb + T.Sample(S, uv - float2(0, px.y)).rgb) * 0.25;
         c += (c - n) * p2.x * 0.9;
     }
-    float gain = exp2(p0.x);
+    float gain = exp2(p0.x + p3.w);
     float cf = 1.0 + p0.y * 0.9;
     float3 chg = float3(1.0 + p0.w * 0.12 - p1.x * 0.02, 1.0 - p1.x * 0.10, 1.0 - p0.w * 0.12 - p1.x * 0.02);
-    c = c * gain * chg;
+    c = c * gain * chg * p3.rgb;
     c = (c - 0.5) * cf + 0.5;
     float l = dot(c, float3(0.299, 0.587, 0.114));
     c = l + (c - l) * (1.0 + p0.z);
@@ -100,7 +102,7 @@ bool Init(ID3D11Device* dev) {
               SUCCEEDED(dev->CreatePixelShader(pb->GetBufferPointer(), pb->GetBufferSize(), nullptr, &s_ps));
     vb->Release(); pb->Release();
     if (!ok) return false;
-    D3D11_BUFFER_DESC bd = {}; bd.ByteWidth = 48; bd.Usage = D3D11_USAGE_DYNAMIC; bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER; bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    D3D11_BUFFER_DESC bd = {}; bd.ByteWidth = 64; bd.Usage = D3D11_USAGE_DYNAMIC; bd.BindFlags = D3D11_BIND_CONSTANT_BUFFER; bd.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
     if (FAILED(dev->CreateBuffer(&bd, nullptr, &s_cb))) return false;
     D3D11_SAMPLER_DESC sd = {}; sd.Filter = D3D11_FILTER_MIN_MAG_MIP_LINEAR; sd.AddressU = sd.AddressV = sd.AddressW = D3D11_TEXTURE_ADDRESS_CLAMP; sd.MaxLOD = D3D11_FLOAT32_MAX;
     if (FAILED(dev->CreateSamplerState(&sd, &s_smp))) return false;
@@ -118,7 +120,8 @@ bool Init(ID3D11Device* dev) {
 static bool Neutral() {
     return std::fabs(g.cfg.exposure) < 0.005f && std::fabs(g.cfg.contrast) < 0.005f && std::fabs(g.cfg.saturation) < 0.005f &&
            std::fabs(g.cfg.temperature) < 0.005f && std::fabs(g.cfg.tint) < 0.005f && g.cfg.vignette < 0.01f &&
-           g.cfg.grain < 0.01f && g.cfg.chroma < 0.01f && g.cfg.sharpen < 0.01f;
+           g.cfg.grain < 0.01f && g.cfg.chroma < 0.01f && g.cfg.sharpen < 0.01f &&
+           std::fabs(g_lightBright) < 0.005f && std::fabs(g_lightCol[0] - 1) < 0.005f && std::fabs(g_lightCol[1] - 1) < 0.005f && std::fabs(g_lightCol[2] - 1) < 0.005f;
 }
 
 void LiveFxPresent(void* swapChain) {
@@ -151,12 +154,35 @@ void LiveFxPresent(void* swapChain) {
         ctx->CopyResource(s_tex, bb);
         D3D11_MAPPED_SUBRESOURCE m;
         if (SUCCEEDED(ctx->Map(s_cb, 0, D3D11_MAP_WRITE_DISCARD, 0, &m))) {
-            float v[12] = {g.cfg.exposure, g.cfg.contrast, g.cfg.saturation, g.cfg.temperature,
+            float v[16] = {g.cfg.exposure, g.cfg.contrast, g.cfg.saturation, g.cfg.temperature,
                            g.cfg.tint, g.cfg.vignette, g.cfg.grain, g.cfg.chroma,
-                           g.cfg.sharpen, (float)(GetTickCount() % 100000) * 0.001f, (float)d.Width, (float)d.Height};
+                           g.cfg.sharpen, (float)(GetTickCount() % 100000) * 0.001f, (float)d.Width, (float)d.Height,
+                           g_lightCol[0], g_lightCol[1], g_lightCol[2], g_lightBright};
             std::memcpy(m.pData, v, sizeof v);
             ctx->Unmap(s_cb, 0);
         }
+        // The game caches its own pipeline state and does not rebind everything every frame, so whatever this pass
+        // changes must be put back exactly, or the next frame's world draws with our state (black world, HUD fine).
+        ID3D11RenderTargetView* oRtv[D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT] = {};
+        ID3D11DepthStencilView* oDsv = nullptr;
+        ctx->OMGetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, oRtv, &oDsv);
+        UINT nvp = D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE; D3D11_VIEWPORT oVp[D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE] = {};
+        ctx->RSGetViewports(&nvp, oVp);
+        UINT nsc = D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE; D3D11_RECT oSc[D3D11_VIEWPORT_AND_SCISSORRECT_OBJECT_COUNT_PER_PIPELINE] = {};
+        ctx->RSGetScissorRects(&nsc, oSc);
+        ID3D11RasterizerState* oRs = nullptr; ctx->RSGetState(&oRs);
+        ID3D11BlendState* oBs = nullptr; FLOAT oBf[4] = {}; UINT oSm = 0; ctx->OMGetBlendState(&oBs, oBf, &oSm);
+        ID3D11DepthStencilState* oDs = nullptr; UINT oSr = 0; ctx->OMGetDepthStencilState(&oDs, &oSr);
+        ID3D11InputLayout* oIl = nullptr; ctx->IAGetInputLayout(&oIl);
+        D3D11_PRIMITIVE_TOPOLOGY oTop; ctx->IAGetPrimitiveTopology(&oTop);
+        ID3D11VertexShader* oVs = nullptr; ctx->VSGetShader(&oVs, nullptr, nullptr);
+        ID3D11PixelShader* oPs = nullptr; ctx->PSGetShader(&oPs, nullptr, nullptr);
+        ID3D11GeometryShader* oGs = nullptr; ctx->GSGetShader(&oGs, nullptr, nullptr);
+        ID3D11HullShader* oHs = nullptr; ctx->HSGetShader(&oHs, nullptr, nullptr);
+        ID3D11DomainShader* oDom = nullptr; ctx->DSGetShader(&oDom, nullptr, nullptr);
+        ID3D11Buffer* oCb = nullptr; ctx->PSGetConstantBuffers(0, 1, &oCb);
+        ID3D11SamplerState* oSmp = nullptr; ctx->PSGetSamplers(0, 1, &oSmp);
+        ID3D11ShaderResourceView* oSrv = nullptr; ctx->PSGetShaderResources(0, 1, &oSrv);
         D3D11_VIEWPORT vp = {0, 0, (float)d.Width, (float)d.Height, 0, 1};
         ctx->OMSetRenderTargets(1, &rtv, nullptr);
         ctx->RSSetViewports(1, &vp);
@@ -167,6 +193,8 @@ void LiveFxPresent(void* swapChain) {
         ctx->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
         ctx->VSSetShader(s_vs, nullptr, 0);
         ctx->GSSetShader(nullptr, nullptr, 0);
+        ctx->HSSetShader(nullptr, nullptr, 0);
+        ctx->DSSetShader(nullptr, nullptr, 0);
         ctx->PSSetShader(s_ps, nullptr, 0);
         ctx->PSSetConstantBuffers(0, 1, &s_cb);
         ctx->PSSetSamplers(0, 1, &s_smp);
@@ -174,6 +202,28 @@ void LiveFxPresent(void* swapChain) {
         ctx->Draw(3, 0);
         ID3D11ShaderResourceView* nul = nullptr;
         ctx->PSSetShaderResources(0, 1, &nul);
+        // put everything back
+        ctx->OMSetRenderTargets(D3D11_SIMULTANEOUS_RENDER_TARGET_COUNT, oRtv, oDsv);
+        ctx->RSSetViewports(nvp, oVp);
+        ctx->RSSetScissorRects(nsc, oSc);
+        ctx->RSSetState(oRs);
+        ctx->OMSetBlendState(oBs, oBf, oSm);
+        ctx->OMSetDepthStencilState(oDs, oSr);
+        ctx->IASetInputLayout(oIl);
+        ctx->IASetPrimitiveTopology(oTop);
+        ctx->VSSetShader(oVs, nullptr, 0);
+        ctx->PSSetShader(oPs, nullptr, 0);
+        ctx->GSSetShader(oGs, nullptr, 0);
+        ctx->HSSetShader(oHs, nullptr, 0);
+        ctx->DSSetShader(oDom, nullptr, 0);
+        ctx->PSSetConstantBuffers(0, 1, &oCb);
+        ctx->PSSetSamplers(0, 1, &oSmp);
+        ctx->PSSetShaderResources(0, 1, &oSrv);
+        for (auto*& r : oRtv) if (r) { r->Release(); r = nullptr; }
+        if (oDsv) oDsv->Release();
+        if (oRs) oRs->Release(); if (oBs) oBs->Release(); if (oDs) oDs->Release(); if (oIl) oIl->Release();
+        if (oVs) oVs->Release(); if (oPs) oPs->Release(); if (oGs) oGs->Release(); if (oHs) oHs->Release(); if (oDom) oDom->Release();
+        if (oCb) oCb->Release(); if (oSmp) oSmp->Release(); if (oSrv) oSrv->Release();
         rtv->Release();
         ok = true;
     } while (0);

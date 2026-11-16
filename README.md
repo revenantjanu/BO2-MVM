@@ -20,8 +20,19 @@ BO2 MVM is built for putting together cinematics and trickshot edits in Zombies.
 |---|---|
 | **Camera** | Free camera with roll and FOV. Keyframed paths with per-key ease and speed, spline or linear, undo/redo, scrubbing and speed ramps. One-key path recording (F9) with a countdown, smoothing and a take library. Orbit, dolly zoom, lock-on to a zombie or the player, camera shake. A demo tab for flying through saved Plutonium demos. |
 | **Zombies** | Spawn zombies at your crosshair and choose their pose, speed and model. Reset everything to the same positions for the next take. |
-| **Look** | Letterbox, vignette, grain, color grade, chromatic aberration, sharpen and bloom. Depth of field with a focus selector (you, a zombie, lock-on or manual). Depth-key green screen. |
+| **Look** | Letterbox, vignette, grain, color grade, chromatic aberration and sharpen, shown live on screen as you edit and recorded as you see them (bloom and light streaks are added to the saved video only). Map light: brightness and light colour for the whole scene. Depth of field with a focus selector (you, a zombie, lock-on or manual). Depth-key green screen. |
 | **Capture** | Fixed-step rendering with motion blur, written to MP4 through ffmpeg. Stills with F8. The overlay never shows up in the recording. |
+
+## Screenshots
+
+![A zombie from a low angle](docs/screenshots/shot-zombie-lowangle.jpg)
+![Trench shot](docs/screenshots/shot-trench.jpg)
+![Colour grade and chromatic aberration](docs/screenshots/shot-chroma-grade.jpg)
+
+![Effects tab with depth of field](docs/screenshots/tool-effects-dof.jpg)
+![Camera tab](docs/screenshots/tool-camera.jpg)
+![Zombies tab](docs/screenshots/tool-zombies.jpg)
+![Demo tab](docs/screenshots/tool-demo.jpg)
 
 ## Install
 

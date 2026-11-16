@@ -83,6 +83,8 @@ struct State {
 };
 
 extern State g;
+extern float g_lightBright;   // map light (live pass): brightness in stops
+extern float g_lightCol[3];   // map light (live pass): scene light colour
 extern bool g_liveFxOk;    // the live shader pass ran this frame (so the video must not bake the same effects again)
 void LiveFxPresent(void* swapChain);
 extern bool g_liveGrade;   // colour preview done by the game (film tweaks) instead of baked into the video
