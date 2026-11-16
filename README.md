@@ -78,6 +78,12 @@ You need Visual Studio with the Desktop development with C++ workload, CMake, Ni
 
 Not tested on every map or Plutonium build. If `t6zm.exe` changes, the DLL checks its signatures and turns itself off instead of patching memory it can't verify. There is no depth-pass export and no audio capture. It will not inject into a game that wasn't started with `-lan`.
 
+## Is this safe?
+
+BO2 MVM works by injecting a DLL into the game, which is also how cheats work, so some antivirus tools may flag it. That is why the full source is here. Read it, or build it yourself with `build.bat` and use your own files instead of the prebuilt ones.
+
+Everything it does outside the game window: it starts `ffmpeg.exe` to encode your recordings, it opens folders in Explorer from the menu, and only if you use the ffmpeg download button or script, it downloads ffmpeg from GitHub (BtbN) or gyan.dev. It makes no other network connections, and it will not run unless the game was started with `-lan`. Use it offline only. Injecting into online games can get you banned.
+
 ## Credits
 
 | | |
