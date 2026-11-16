@@ -12,6 +12,8 @@ BO2 MVM is built for putting together cinematics and trickshot edits in Zombies.
 
 **This is a work in progress.** Parts of it are untested, some things are rough, and some things are unfinished. The full source is in this repo so you can fix it, change it, or build on it however you like.
 
+**LAN ONLY: you must start the game in LAN mode.** Launch Plutonium with the -lan flag (full command in the Install section). The tool will not inject or work in a normal online game, and it is meant for offline use only.
+
 ## What it does
 
 | | |
