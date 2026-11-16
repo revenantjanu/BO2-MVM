@@ -297,6 +297,7 @@ void PostFx(uint8_t* px, UINT w, UINT h) {
 static inline uint8_t Cl8(float v) { return (uint8_t)(v < 0 ? 0 : v > 255 ? 255 : v + 0.5f); }
 
 // colour grade + chromatic aberration + sharpen. rb = true when the buffer is RGBA (red is byte 0)
+bool g_liveGrade = true;
 void GradeFx(uint8_t* px, UINT w, UINT h, bool rb) {
     const int ri = rb ? 0 : 2, bi = rb ? 2 : 0;
     // chromatic aberration: shift red out and blue in, growing toward the edges
@@ -333,6 +334,7 @@ void GradeFx(uint8_t* px, UINT w, UINT h, bool rb) {
     }
     // colour grade through a 256-entry curve per channel (cheap: one table lookup per sample)
     float ex = g.cfg.exposure, co = g.cfg.contrast, sa = g.cfg.saturation, te = g.cfg.temperature, ti = g.cfg.tint;
+    if (g_liveGrade) { ex = 0; co = 0; if (sa < 0) sa = 0; }     // those are already drawn by the game itself
     if (std::fabs(ex) < 0.005f && std::fabs(co) < 0.005f && std::fabs(sa) < 0.005f && std::fabs(te) < 0.005f && std::fabs(ti) < 0.005f) return;
     uint8_t lut[3][256];                                   // [0]=R [1]=G [2]=B
     float gain = std::pow(2.0f, ex);

@@ -83,6 +83,7 @@ struct State {
 };
 
 extern State g;
+extern bool g_liveGrade;   // colour preview done by the game (film tweaks) instead of baked into the video
 
 // Plutonium runs the game inside plutonium-bootstrapper-win32.exe, so the main module may not be the game image.
 // The game image always sits at its preferred base 0x400000; prefer that when it is a valid PE.

@@ -16,9 +16,104 @@ init()
     setdvar( "mvm_track2", "MVMT 0 0 0 0" );
     level.mvm_track_id = -1;
     level.mvm_track2_id = -1;
+    level.mvm_failsafe_orig = 1;
+
+    if ( isdefined( level.zombie_vars ) && isdefined( level.zombie_vars["zombie_use_failsafe"] ) )
+        level.mvm_failsafe_orig = level.zombie_vars["zombie_use_failsafe"];
+
+    setdvar( "mvm_dof", "" );
+    setdvar( "mvm_film", "" );
     level thread mvm_track_loop();
     level thread mvm_loop();
+    level thread mvm_fx_loop();
     level thread mvm_ready();
+}
+
+// live post effects the overlay asks for. They are set from the script because the console route is cheat locked on some builds.
+// mvm_dof  = "nearStart nearEnd farStart farEnd nearBlur farBlur" or "off"
+// mvm_film = "on brightness contrast desaturation" or "off"
+mvm_fx_loop()
+{
+    level endon( "end_game" );
+    last_dof = "";
+    last_film = "";
+    t = 0;
+
+    for ( ;; )
+    {
+        wait 0.1;
+        t = t + 0.1;
+        dof = getdvar( "mvm_dof" );
+
+        if ( dof != "" && ( dof != last_dof || t > 1.5 ) )
+        {
+            last_dof = dof;
+            mvm_apply_dof( dof );
+        }
+        else if ( dof == "" && last_dof != "" )
+        {
+            last_dof = "";
+            mvm_apply_dof( "off" );
+        }
+
+        film = getdvar( "mvm_film" );
+
+        if ( film != "" && ( film != last_film || t > 1.5 ) )
+        {
+            last_film = film;
+            mvm_apply_film( film );
+        }
+        else if ( film == "" && last_film != "" )
+        {
+            last_film = "";
+            mvm_apply_film( "off" );
+        }
+
+        if ( t > 1.5 )
+            t = 0;
+    }
+}
+
+mvm_apply_dof( s )
+{
+    players = level.players;
+
+    for ( i = 0; i < players.size; i++ )
+    {
+        if ( s == "off" )
+        {
+            players[i] setdepthoffield( 0, 0, 7000, 10000, 6, 1.8 );
+            continue;
+        }
+
+        a = strtok( s, " " );
+
+        if ( a.size < 6 )
+            continue;
+
+        players[i] setdepthoffield( float( a[0] ), float( a[1] ), float( a[2] ), float( a[3] ), float( a[4] ), float( a[5] ) );
+    }
+}
+
+mvm_apply_film( s )
+{
+    if ( s == "off" )
+    {
+        setdvar( "r_filmUseTweaks", 0 );
+        setdvar( "r_filmTweakEnable", 0 );
+        return;
+    }
+
+    a = strtok( s, " " );
+
+    if ( a.size < 4 )
+        return;
+
+    setdvar( "r_filmUseTweaks", 1 );
+    setdvar( "r_filmTweakEnable", 1 );
+    setdvar( "r_filmTweakBrightness", float( a[1] ) );
+    setdvar( "r_filmTweakContrast", float( a[2] ) );
+    setdvar( "r_filmTweakDesaturation", float( a[3] ) );
 }
 
 // lock-on / depth-of-field focus: reports where the tracked zombie (id), the player (0) or the middle of all zombies (-2) is.
@@ -424,7 +519,10 @@ mvm_spawn_at( id, pos, yaw, mode, model )
     sp.origin = pos;
     sp.angles = ( 0, yaw, 0 );
 
+    // the game's round failsafe kills any zombie that stands still for 30 s: switch it off just while this one spawns
+    level.zombie_vars["zombie_use_failsafe"] = 0;
     ai = spawn_zombie( sp, "mvm_zombie", sp );
+    level thread mvm_failsafe_restore();
 
     if ( !isdefined( ai ) )
     {
@@ -436,9 +534,18 @@ mvm_spawn_at( id, pos, yaw, mode, model )
     ai.ignore_cleanup_mgr = 1;      // stop the round cleanup from deleting it
     ai.no_powerups = 1;
     ai.ignore_enemy_count = 1;
+    ai.ignore_round_spawn_failsafe = 1;
     level.mvm_ai[id] = ai;
     ai thread mvm_setup( pos, yaw, mode, model );
     ai thread mvm_guard( pos, yaw );
+}
+
+mvm_failsafe_restore()
+{
+    wait 1.5;
+
+    if ( isdefined( level.mvm_failsafe_orig ) )
+        level.zombie_vars["zombie_use_failsafe"] = level.mvm_failsafe_orig;
 }
 
 // next take: remove every zombie we made (alive, dead or leftover bodies) and respawn each one exactly where it started
@@ -487,6 +594,7 @@ mvm_setup( pos, yaw, mode, model )
 {
     self endon( "death" );
     wait 0.8;
+    self notify( "goal" );          // ends zombie_assure_node, which kills a zombie that never reaches an entrance
     self forceteleport( pos, ( 0, yaw, 0 ) );
 
     if ( isdefined( model ) && model != "default" )

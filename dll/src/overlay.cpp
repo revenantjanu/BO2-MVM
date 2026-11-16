@@ -902,6 +902,23 @@ static void DofApply(bool force) {
     QueueCmd("r_dof_nearStart %.1f", v[0]); QueueCmd("r_dof_nearEnd %.1f", v[1]);
     QueueCmd("r_dof_farStart %.1f", v[2]);  QueueCmd("r_dof_farEnd %.1f", v[3]);
     QueueCmd("r_dof_nearBlur %.1f", v[4]);  QueueCmd("r_dof_farBlur %.1f", v[5]);
+    // second route: the game script applies it with setdepthoffield, which does not depend on console dvars
+    QueueCmd("set mvm_dof \"%.1f %.1f %.1f %.1f %.1f %.1f\"", v[0], v[1], v[2], v[3], v[4], v[5]);
+}
+static void DofOff() { QueueCmd("set mvm_dof \"\""); }
+// live colour preview: brightness / contrast / desaturation go to the game as film tweaks (script side)
+static void LiveGradeUpdate() {
+    static std::string last = "?";
+    std::string s;
+    if (g_liveGrade) {
+        float br = std::max(-0.5f, std::min(0.5f, g.cfg.exposure * 0.12f));
+        float co = 1.0f + g.cfg.contrast * 0.9f;
+        float ds = g.cfg.saturation < 0 ? std::min(1.0f, -g.cfg.saturation) : 0.0f;
+        if (std::fabs(br) > 0.004f || std::fabs(co - 1.0f) > 0.004f || ds > 0.004f) {
+            char b[96]; std::snprintf(b, sizeof b, "1 %.3f %.3f %.3f", br, co, ds); s = b;
+        }
+    }
+    if (s != last) { last = s; QueueCmd("set mvm_film \"%s\"", s.c_str()); }
 }
 static void GreenApply() {
     SendCheats();
@@ -1056,7 +1073,8 @@ static void PageEffects() {
     Sl("tint", &g.cfg.tint, -1.0f, 1.0f, "%.2f");
     Sl("chromatic aberration", &g.cfg.chroma, 0.0f, 1.0f, "%.2f");
     Sl("sharpen", &g.cfg.sharpen, 0.0f, 1.0f, "%.2f");
-    Hint("All of this is baked into the saved video only. It is not shown live in the game.");
+    Toggle("preview exposure / contrast / desaturation live in game", &g_liveGrade);
+    Hint("With the preview on, exposure, contrast and desaturation show live and are recorded as the game draws them. Temperature, tint, saturation boost, chromatic aberration and sharpen are added to the saved video only.");
     CardEnd();
     CardBegin("composition guides", "e_guides");
     { const char* gd[] = {"off", "thirds", "center", "thirds+diag"}; Seg("guides", gd, 4, &g.cfg.guides); }
@@ -1065,7 +1083,7 @@ static void PageEffects() {
     CardBegin("depth of field", "e_dof");
     {
         bool on = Toggle("dof", &g_fx.dof);
-        if (on) { SendCheats(); QueueCmd("r_dof_enable %d", g_fx.dof ? 1 : 0); QueueCmd("r_dof_tweak %d", g_fx.dof ? 1 : 0); if (g_fx.dof) DofApply(true); }
+        if (on) { SendCheats(); QueueCmd("r_dof_enable %d", g_fx.dof ? 1 : 0); QueueCmd("r_dof_tweak %d", g_fx.dof ? 1 : 0); if (g_fx.dof) DofApply(true); else DofOff(); }
         ImGui::TextDisabled("focus on");
         const char* tg[] = {"manual", "me", "zombie", "lock-on", "all"};
         if (Seg("doft", tg, 5, &g_fx.dofTarget) && g_fx.dofTarget != 0 && !g_fx.dof) { g_fx.dof = true; SendCheats(); QueueCmd("r_dof_enable 1"); QueueCmd("r_dof_tweak 1"); DofApply(true); }
@@ -1093,7 +1111,7 @@ static void PageEffects() {
             if (ch) { g_fx.dofTarget = 0; SendCheats(); DofApply(true); }
             ImGui::TreePop();
         }
-        if (Btn("reset dof")) { g_fx.dof = false; g_fx.dofTarget = 0; SendCheats(); QueueCmd("r_dof_enable 0"); QueueCmd("r_dof_tweak 0"); }
+        if (Btn("reset dof")) { g_fx.dof = false; g_fx.dofTarget = 0; SendCheats(); QueueCmd("r_dof_enable 0"); QueueCmd("r_dof_tweak 0"); DofOff(); }
     }
     CardEnd();
     ColNext();
@@ -1524,7 +1542,7 @@ void HandleHotkeys() {
         }
     }
     UpdateRender();
-    { static ULONGLONG lt = GetTickCount64(); ULONGLONG nt = GetTickCount64(); float d = (float)(nt - lt) / 1000.0f; lt = nt; if (d > 0.25f) d = 0; TickTake(d); DofUpdate(d); }
+    { static ULONGLONG lt = GetTickCount64(); ULONGLONG nt = GetTickCount64(); float d = (float)(nt - lt) / 1000.0f; lt = nt; if (d > 0.25f) d = 0; TickTake(d); DofUpdate(d); LiveGradeUpdate(); }
         if (KeyPressedEdge(VK_F5)) RecordPressed();          // F5: record (countdown, then the take) / stop / cancel
     if (g.freecam && KeyPressedEdge('J') && g.path.keys.size() >= 2) StartDolly();      // J: rewind and play
     if (g.freecam && KeyPressedEdge('L') && !g.path.keys.empty()) g.path.keys.pop_back();                      // L: remove last point
