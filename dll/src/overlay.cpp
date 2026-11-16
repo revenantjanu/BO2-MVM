@@ -1073,8 +1073,8 @@ static void PageEffects() {
     Sl("tint", &g.cfg.tint, -1.0f, 1.0f, "%.2f");
     Sl("chromatic aberration", &g.cfg.chroma, 0.0f, 1.0f, "%.2f");
     Sl("sharpen", &g.cfg.sharpen, 0.0f, 1.0f, "%.2f");
-    Toggle("preview exposure / contrast / desaturation live in game", &g_liveGrade);
-    Hint("With the preview on, exposure, contrast and desaturation show live and are recorded as the game draws them. Temperature, tint, saturation boost, chromatic aberration and sharpen are added to the saved video only.");
+    Toggle("live preview in game (recorded as you see it)", &g_liveGrade);
+    Hint("Live preview shows the grade, temperature, tint, vignette, grain, chromatic aberration and sharpen on screen and in the video. Bloom and light streaks are only added to the saved video.");
     CardEnd();
     CardBegin("composition guides", "e_guides");
     { const char* gd[] = {"off", "thirds", "center", "thirds+diag"}; Seg("guides", gd, 4, &g.cfg.guides); }
@@ -1542,7 +1542,7 @@ void HandleHotkeys() {
         }
     }
     UpdateRender();
-    { static ULONGLONG lt = GetTickCount64(); ULONGLONG nt = GetTickCount64(); float d = (float)(nt - lt) / 1000.0f; lt = nt; if (d > 0.25f) d = 0; TickTake(d); DofUpdate(d); LiveGradeUpdate(); }
+    { static ULONGLONG lt = GetTickCount64(); ULONGLONG nt = GetTickCount64(); float d = (float)(nt - lt) / 1000.0f; lt = nt; if (d > 0.25f) d = 0; TickTake(d); DofUpdate(d); }
         if (KeyPressedEdge(VK_F5)) RecordPressed();          // F5: record (countdown, then the take) / stop / cancel
     if (g.freecam && KeyPressedEdge('J') && g.path.keys.size() >= 2) StartDolly();      // J: rewind and play
     if (g.freecam && KeyPressedEdge('L') && !g.path.keys.empty()) g.path.keys.pop_back();                      // L: remove last point
@@ -1596,6 +1596,7 @@ bool InitImgui(IDXGISwapChain* sc) {
 }
 
 void DrawOverlayFrame(IDXGISwapChain* sc) {
+    LiveFxPresent(sc);                 // live colour / vignette / grain pass
     CaptureFramePresent(sc);           // before the overlay is drawn
     ZombiesUpdate(sc);
 

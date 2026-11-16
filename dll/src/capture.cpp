@@ -251,7 +251,8 @@ bool GrabThumb(void* swapChainPtr, int out, float cropSide, float cropTop, std::
 
 // look: letterbox bars, vignette and film grain, baked into the frame (BGRA or RGBA, alpha untouched)
 void PostFx(uint8_t* px, UINT w, UINT h) {
-    if (g.cfg.vignette > 0.01f) {
+    const bool live = g_liveGrade && g_liveFxOk;
+    if (!live && g.cfg.vignette > 0.01f) {
         if (c.vigW != w || c.vigH != h || std::fabs(c.vigStrength - g.cfg.vignette) > 0.001f) {
             c.vigW = w; c.vigH = h; c.vigStrength = g.cfg.vignette;
             c.vigMask.resize((size_t)w * h);
@@ -270,7 +271,7 @@ void PostFx(uint8_t* px, UINT w, UINT h) {
             p[0] = (uint8_t)((p[0] * m) >> 8); p[1] = (uint8_t)((p[1] * m) >> 8); p[2] = (uint8_t)((p[2] * m) >> 8);
         }
     }
-    if (g.cfg.grain > 0.01f) {
+    if (!live && g.cfg.grain > 0.01f) {
         int amp = (int)(g.cfg.grain * 40.0f);
         for (size_t i = 0, n = (size_t)w * h; i < n; ++i) {
             c.rng ^= c.rng << 13; c.rng ^= c.rng >> 17; c.rng ^= c.rng << 5;
@@ -299,6 +300,7 @@ static inline uint8_t Cl8(float v) { return (uint8_t)(v < 0 ? 0 : v > 255 ? 255 
 // colour grade + chromatic aberration + sharpen. rb = true when the buffer is RGBA (red is byte 0)
 bool g_liveGrade = true;
 void GradeFx(uint8_t* px, UINT w, UINT h, bool rb) {
+    if (g_liveGrade && g_liveFxOk) return;       // the live pass already did all of this
     const int ri = rb ? 0 : 2, bi = rb ? 2 : 0;
     // chromatic aberration: shift red out and blue in, growing toward the edges
     if (g.cfg.chroma > 0.01f) {

@@ -83,6 +83,8 @@ struct State {
 };
 
 extern State g;
+extern bool g_liveFxOk;    // the live shader pass ran this frame (so the video must not bake the same effects again)
+void LiveFxPresent(void* swapChain);
 extern bool g_liveGrade;   // colour preview done by the game (film tweaks) instead of baked into the video
 
 // Plutonium runs the game inside plutonium-bootstrapper-win32.exe, so the main module may not be the game image.

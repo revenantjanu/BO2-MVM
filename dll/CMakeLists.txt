@@ -12,7 +12,7 @@ endif()
 
 set(IMGUI third_party/imgui)
 add_library(bo2mvm SHARED
-  src/dllmain.cpp src/core.cpp src/overlay.cpp src/capture.cpp src/zombies.cpp
+  src/dllmain.cpp src/core.cpp src/overlay.cpp src/capture.cpp src/zombies.cpp src/livefx.cpp
   ${IMGUI}/imgui.cpp ${IMGUI}/imgui_draw.cpp ${IMGUI}/imgui_tables.cpp ${IMGUI}/imgui_widgets.cpp
   ${IMGUI}/imgui_impl_win32.cpp ${IMGUI}/imgui_impl_dx11.cpp)
 target_include_directories(bo2mvm PRIVATE src ${IMGUI})
